@@ -1,0 +1,407 @@
+---
+title: "test_results_model04_EEI"
+author: "Kevin Haase"
+date: "3/17/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install and load packages
+#install.packages("pacman")
+library("pacman")
+
+pacman::p_load(readr, dplyr, tidyr, reshape2,ggplot2, ggrepel, cowplot, ggforce, circlize, chisq.posthoc.test, trend)
+```
+
+```{r}
+setwd("C:/Users/haase_k/Desktop/SVNKevin/PhD-Anglerverhalten/modelling/Angler Model/NetLogo/model_04_1_Erotetic")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+#Import data
+
+The real world data is importet over the script "realworld_data".
+
+## NetLogo
+
+Netlogo model output of 210 runs (10 replication for each value of a) is importet below.
+
+```{r}
+Erotetic_angler <- read_csv("model_output/angler.csv")
+Erotetic_angler <- separate(data = Erotetic_angler, col = run_ID, into = c("run", "rep"), sep = "_", remove = F)
+
+Erotetic_location <- read_csv("model_output/location.csv")
+Erotetic_location <- separate(data = Erotetic_location, col = run_ID, into = c("run", "rep"), sep = "_", remove = F)
+
+Erotetic_parameter <- Erotetic_location %>%
+  group_by(run) %>%
+  summarise()
+```
+
+
+
+
+
+
+
+
+
+# gerneral model set up
+
+## Number of angler (per fishing method)
+
+```{r}
+# total number per run
+test <- Erotetic_angler %>%
+  group_by(run_ID)%>%
+  mutate(n.run = length(unique(who)))
+
+# total number per fishing method
+test <- test %>%
+  group_by(run_ID, fishing_method, n.run)%>%
+  summarise(n.method = length(unique(who)))
+
+test <- mutate(.data = test, perc.angler = n.method/n.run)
+
+test <- test %>%
+  group_by(fishing_method) %>%
+  summarise(mean(perc.angler),
+            min(perc.angler),
+            max(perc.angler))
+```
+
+correct distribution of fishing methods
+
+
+## Origin of angler
+
+```{r}
+test <- Erotetic_angler %>%
+  group_by(run_ID)%>%
+  summarise(min_zip = min(homelocation_name),
+            max_zip = max(homelocation_name))
+```
+
+correct range of zip codes
+
+
+
+
+
+
+
+
+# Model comparison
+
+
+
+## Fishing locations visited
+
+anzahl fishing locations
+
+```{r}
+
+test <- filter(.data = Erotetic_location, visited == TRUE)
+test <- test %>%
+  group_by(run_ID, location_method) %>%
+  summarise(n.locations = length(unique(location_name)))
+
+range(test$n.locations[test$location_method == "Boot"])
+range(test$n.locations[test$location_method == "Kutter"])
+range(test$n.locations[test$location_method == "Land"])
+```
+
+```{r}
+test <- filter(.data = Erotetic_location, visited == TRUE)
+test <- test %>%
+  group_by(run, location_method) %>%
+  summarise(n.locations = length(unique(location_name)))
+
+Erotetic_parameter <- left_join(Erotetic_parameter, test)
+```
+
+
+
+
+
+
+
+
+## Distribution between fishing locations (key metric)
+
+
+```{r}
+#for each experiment
+test <- Erotetic_location %>%
+  group_by(run_ID, location_method)%>%
+  mutate(n.total.fishingday.exp = sum(total_visits))
+
+test <- mutate(.data = test, perc_exp = total_visits/n.total.fishingday.exp)
+
+test <- test%>%
+  group_by(run_ID, run, rep, location_method)%>%
+  summarise(mean.perc_exp = mean(perc_exp)*100,
+            median.perc_exp = median(perc_exp)*100,
+            sd.perc_exp = sd(perc_exp)*100,
+            min.perc_exp = min(perc_exp)*100,
+            max.perc_exp = max(perc_exp)*100)
+
+
+test <- test %>%
+  group_by(run, location_method) %>%
+  summarise(mean.perc_allrep = mean(mean.perc_exp),
+            median.perc_allrep = mean(median.perc_exp),
+            sd.perc_allrep = mean(sd.perc_exp),
+            min.perc_allrep = mean(min.perc_exp),
+            max.perc_allrep = mean(max.perc_exp))
+
+```
+
+
+
+
+## angler per day
+
+
+```{r}
+Erotetic_location <- mutate(.data = Erotetic_location, ang.per.day = total_visits/365)
+
+
+test <- Erotetic_location %>%
+  group_by(run, run_ID, location_method)%>%
+  mutate(sum.ang.per.day = sum(ang.per.day))
+
+test <- mutate(.data = test, perc.per.day = (ang.per.day/sum.ang.per.day)*100)
+
+
+
+test <- test %>%
+  group_by(run, run_ID, location_method) %>%
+  summarise(mean.per.day = mean(perc.per.day),
+            median.per.day = median(perc.per.day),
+            sd.per.day = sd(perc.per.day),
+            min.per.day = min(perc.per.day),
+            max.per.day = max(perc.per.day))
+
+test <- test %>%
+  group_by(run, location_method) %>%
+  summarise(mean.per.day = mean(mean.per.day),
+            median.per.day = mean(median.per.day),
+            sd.per.day = mean(sd.per.day),
+            min.per.day = mean(min.per.day),
+            max.per.day = mean(max.per.day))
+```
+
+
+
+```{r}
+Erotetic_parameter <- left_join(Erotetic_parameter, test)
+```
+
+
+
+
+
+
+
+
+
+## Average differences in travel distances
+
+Three data frames are needed: run is the netlogo model output, dat the real world angler data, and dist the distance between fishing location and zip_codes
+
+```{r}
+run <- Erotetic_angler
+dat <- dat_zip
+dat <- filter(.data = dat, zip_code > 9999 & zip_code < 33000 | 
+                            zip_code > 37999 & zip_code < 40000 |
+                            zip_code > 48999 & zip_code < 50000)
+dist <- dist_safe
+
+
+
+#transform 5 digit zipcode to 2 digit
+run$zip_code <- formatC(run$homelocation_name, width = 5, format = "d", flag = "0")
+run$zip_code <- as.numeric(substr(run$zip_code, 1, 2))
+
+dat$zip_code <- formatC(dat$zip_code, width = 5, format = "d", flag = "0")
+dat$zip_code <- as.numeric(substr(dat$zip_code, 1, 2))
+
+dist$zip_code <- formatC(dist$zip_code, width = 5, format = "d", flag = "0")
+dist$zip_code <- as.numeric(substr(dist$zip_code, 1, 2))
+dist <- dist %>%
+  group_by(zip_code, ap_code) %>%
+  summarise(distance = mean(distance_km))
+
+
+
+#rename colums to match each other 
+names(dat)[names(dat) == "harbour_code"] <- "ap_code"
+```
+
+
+
+combine both datasets with distances
+```{r}
+dat <- left_join(dat, dist)
+names(dat)[names(dat) == "survey_category"] <- "fishing_method"
+```
+
+calculate travel distances per zip code
+```{r}
+run <- mutate(.data = run, mean.dist.ang = total_traveled_dist/total_angler_trips)
+run <- filter( .data = run, total_angler_trips > 0)
+
+run <- run %>%
+  group_by(run, fishing_method, zip_code) %>%
+  summarise(mean.dist.e = mean(mean.dist.ang))
+
+
+dat <- dat %>%
+  group_by(fishing_method, zip_code) %>%
+  summarise(mean.dist = mean(distance))
+
+```
+
+
+```{r}
+test <- left_join(run, dat)
+
+test <- mutate(.data = test, mean.diff = mean.dist - mean.dist.e)
+
+
+test2 <- test %>%
+  group_by(run, fishing_method)%>%
+  summarise(mean.diff = mean(abs(mean.diff)))
+```
+
+
+```{r}
+names(Erotetic_parameter)[names(Erotetic_parameter) == "location_method"] <- "fishing_method"
+Erotetic_parameter <- left_join(Erotetic_parameter, test2)
+
+write.table(Erotetic_parameter, "model_output/Erotetic_results.csv", sep = ",", row.names = FALSE)
+```
+
+percentage difference of travel distance
+```{r}
+test <- mutate(.data = test, perc.dist = (mean.dist.e/mean.dist)*100)
+
+test <- mutate(.data = test, perc.diff.dist = abs(100 - perc.dist))
+
+perc.diff.travel <- test %>%
+  group_by(run, fishing_method)%>%
+  summarise(mean.perc.diff.dist = mean(perc.diff.dist))
+```
+
+
+
+
+
+
+
+# comparison to reality
+
+##unweighted difference of each calibration metric to the reality
+
+```{r}
+test <- left_join(Erotetic_parameter, real_values)
+
+test <- mutate(.data = test, dif.n.location = real.n.locations - n.locations,
+                              dif.mean = real.mean.ang.per.sample - mean.per.day,
+                              dif.med = real.median.ang.per.sample - median.per.day,
+                              dif.sd = real.sd.ang.per.sample - sd.per.day,
+                              dif.min = real.min.ang.per.sample - min.per.day,
+                              dif.max = real.max.ang.per.sample - max.per.day)
+
+test <- subset(x = test, select = c(run, fishing_method, dif.n.location, dif.mean, dif.med, dif.sd, dif.min, dif.max, mean.diff))
+```
+
+
+##weighted difference of each calibration metric to the reality
+
+idea: as the metric vary in their values (percent in key metric, number of locations, and kilometer traveled), we need to standardize and do it with percentages of the model output to the real value.
+How to do it:
+- for each metric is the real value = 100%
+- the model output value is X% of the real value
+- calculate the difference from output to real and sum over all metric
+- smallest sum is the best parameter combination
+
+
+### for # harbours and key metric
+
+real values are stored in dataframe "real_values"
+model output in the dataframes "theoryXY_paramter"
+```{r}
+test <- left_join(Erotetic_parameter, real_values)
+test <- subset(x = test, select = -c(mean.diff))
+```
+
+
+calculate percentage of model output to reality
+than the difference to 100%
+than sum up the percentage per parameter combination
+```{r}
+test <- mutate(.data = test, perc.n.locations = (n.locations/real.n.locations)*100,
+                              perc.mean = (mean.per.day/real.mean.ang.per.sample)*100,
+                              perc.med = (median.per.day/real.median.ang.per.sample)*100,
+                              perc.sd = (sd.per.day/real.sd.ang.per.sample)*100,
+                              perc.min = (min.per.day/real.min.ang.per.sample)*100,
+                              perc.max = (max.per.day/real.max.ang.per.sample)*100)
+
+test <- mutate(.data = test, perc.diff.n.locations = abs(100 - perc.n.locations),
+                              perc.diff.mean = abs(100 - perc.mean),
+                              perc.diff.med = abs(100 - perc.med),
+                              perc.diff.sd = abs(100 - perc.sd),
+                              perc.diff.min = abs(100 - perc.min),
+                              perc.diff.max = abs(100 - perc.max))
+
+test <- mutate(.data = test, sum.perc.diff = perc.diff.n.locations + perc.diff.mean + perc.diff.med + perc.diff.sd + perc.diff.min + perc.diff.max)
+
+perc.diff <- test %>%
+  group_by(run, fishing_method, perc.diff.n.locations, perc.diff.mean, perc.diff.med, perc.diff.sd, perc.diff.min, perc.diff.max, sum.perc.diff) %>%
+  summarise()
+```
+
+
+put together percentage difference of number locations and key metric with travel percentage difference
+```{r}
+perc.diff <- left_join(perc.diff, perc.diff.travel)
+
+perc.diff <- mutate(.data = perc.diff, sum.perc.diff = sum.perc.diff + mean.perc.diff.dist)
+
+perc.diff <- subset(x = perc.diff, select = c(run, fishing_method, perc.diff.n.locations, perc.diff.mean, perc.diff.med, perc.diff.sd, perc.diff.min, perc.diff.max, mean.perc.diff.dist, sum.perc.diff))
+```
+
+```{r}
+write.table(perc.diff, "model_output/Erotetic_perc_diff.csv", sep = ",", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
