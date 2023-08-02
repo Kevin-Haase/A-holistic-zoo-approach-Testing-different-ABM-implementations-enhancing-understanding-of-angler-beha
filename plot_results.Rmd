@@ -1,0 +1,685 @@
+---
+title: "Plots"
+author: "Kevin Haase"
+date: "5/23/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install and load packages
+#install.packages("pacman")
+library("pacman")
+
+pacman::p_load(readr, dplyr, tidyr, reshape2,ggplot2, ggrepel, cowplot, ggforce, circlize, chisq.posthoc.test, trend, fitdistrplus)
+
+```
+```{r}
+library(plotly)
+library(htmlwidgets)
+```
+
+
+```{r}
+setwd("C:/Users/haase_k/Desktop/SVNKevin/PhD-Anglerverhalten/modelling/Angler Model/NetLogo")
+```
+
+
+
+
+# Plots for bandit and EEI
+
+import data
+```{r}
+bandit_1_results <- read_csv("model_04_1_bandit/model_output/1000runs/bandit_results.csv")
+bandit_1_results$model <- "bandit_v1"
+
+bandit_2_results <- read_csv("model_04_2_bandit/model_output/1000runs/bandit_04_2_results.csv")
+bandit_2_results$model <- "bandit_v2"
+
+EEI_1_results <- read_csv("model_04_1_EEI/model_output/1000runs/EEI_results.csv")
+EEI_1_results$model <- "EEI_v1"
+
+EEI_2_results <- read_csv("model_04_2_EEI/model_output/1000runs/EEI_04_2_results.csv")
+EEI_2_results$model <- "EEI_v2"
+```
+
+combine data of the different models
+```{r}
+df <- rbind(bandit_1_results, bandit_2_results, EEI_1_results, EEI_2_results)
+
+df_safe <- df
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Boat fishing
+
+```{r}
+df <- df_safe
+df <- filter(.data = df, fishing_method == "Boot")
+```
+
+
+## Effect of parameter a
+
+make one plot with the med, min, max of the different models over parameter a
+```{r}
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 2.498526)+
+  geom_line(aes(x = `value-of-parameter_a`, y = min.per.day, col = model), linetype = "dotted")+
+  geom_hline(yintercept = 0.7571291, linetype = "dotted")+
+  geom_line(aes(x = `value-of-parameter_a`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 8.003936, linetype = "dashed")
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 2.498526)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = sd.per.day, col = model))+
+  geom_hline(yintercept = 1.8713159)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = min.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 0.7571291)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 8.003936)
+```
+
+
+
+## Effect of parameter e
+
+make one plot with the med, min, max of the different models over parameter e
+```{r}
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 2.498526)+
+  geom_line(aes(x = `value-of-parameter_e`, y = min.per.day, col = model), linetype = "dotted")+
+  geom_hline(yintercept = 0.7571291, linetype = "dotted")+
+  geom_line(aes(x = `value-of-parameter_e`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 8.003936, linetype = "dashed")
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 2.498526)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = sd.per.day, col = model))+
+  geom_hline(yintercept = 1.8713159)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = min.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 0.7571291)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 8.003936)
+```
+
+
+
+## Effect of both paramters
+
+
+surf is a matrix to generate a flat surface at the value of the reality
+split dived the data by the model (color would do the same for continuous variable)
+in add_surface split = F remove multipüle surfaces for each model and showscale = F remove the color from the legend
+
+```{r}
+surf <- c(
+  c(2.5, 2.5),
+  c(2.5, 2.5)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~median.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on median ", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "median")))
+ 
+fig
+
+
+htmlwidgets::saveWidget(
+                widget = fig, #the plotly object
+                file = "figure.html", #the path & file name
+                selfcontained = TRUE #creates a single html file
+                )
+```
+
+
+
+
+
+
+```{r}
+surf <- c(
+  c(1.87, 1.87),
+  c(1.87, 1.87)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~sd.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on SD", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "SD")))
+ 
+fig
+```
+
+
+
+```{r}
+surf <- c(
+  c(0.76, 0.76),
+  c(0.76, 0.76)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~min.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on min", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "min")))
+ 
+fig
+```
+
+
+
+```{r}
+surf <- c(
+  c(8, 8),
+  c(8, 8)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~max.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on max", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "max")))
+ 
+fig
+```
+
+
+
+
+```{r}
+surf <- c(
+  c(0, 0),
+  c(0, 0)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~mean.diff, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on difference in travel distance", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "difference to reality in travel distance")))
+ 
+fig
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Charter fishing
+
+```{r}
+df <- df_safe
+df <- filter(.data = df, fishing_method == "Kutter")
+```
+
+
+## Effect of parameter a
+
+make one plot with the med, min, max of the different models over parameter a
+```{r}
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 8.53)+
+  geom_line(aes(x = `value-of-parameter_a`, y = min.per.day, col = model), linetype = "dotted")+
+  geom_hline(yintercept = 2.37, linetype = "dotted")+
+  geom_line(aes(x = `value-of-parameter_a`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 11.52, linetype = "dashed")
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 8.53)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = sd.per.day, col = model))+
+  geom_hline(yintercept = 2.73)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = min.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 2.37)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 11.52)
+```
+
+
+
+## Effect of parameter e
+
+make one plot with the med, min, max of the different models over parameter e
+```{r}
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 8.53)+
+  geom_line(aes(x = `value-of-parameter_e`, y = min.per.day, col = model), linetype = "dotted")+
+  geom_hline(yintercept = 2.37, linetype = "dotted")+
+  geom_line(aes(x = `value-of-parameter_e`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 11.52, linetype = "dashed")
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 8.53)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = sd.per.day, col = model))+
+  geom_hline(yintercept = 2.73)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = min.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 2.37)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 11.52)
+```
+
+
+
+## Effect of both paramters
+
+
+surf is a matrix to generate a flat surface at the value of the reality
+split dived the data by the model (color would do the same for continuous variable)
+in add_surface split = F remove multipüle surfaces for each model and showscale = F remove the color from the legend
+
+```{r}
+surf <- c(
+  c(8.53, 8.53),
+  c(8.53, 8.53)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~median.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on median ", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "median")))
+ 
+fig
+```
+
+
+
+
+
+
+```{r}
+surf <- c(
+  c(2.73, 2.73),
+  c(2.73, 2.73)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~sd.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on SD", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "SD")))
+ 
+fig
+```
+
+
+
+```{r}
+surf <- c(
+  c(2.37, 2.37),
+  c(2.37, 2.37)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~min.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on min", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "min")))
+ 
+fig
+```
+
+
+
+```{r}
+surf <- c(
+  c(11.52, 11.52),
+  c(11.52, 11.52)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~max.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on max", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "max")))
+ 
+fig
+```
+
+
+
+
+```{r}
+surf <- c(
+  c(0, 0),
+  c(0, 0)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~mean.diff, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on difference in travel distance", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "difference to reality in travel distance")))
+ 
+fig
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Land fishing
+
+```{r}
+df <- df_safe
+df <- filter(.data = df, fishing_method == "Land")
+```
+
+
+## Effect of parameter a
+
+make one plot with the med, min, max of the different models over parameter a
+```{r}
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 1.59)+
+  geom_line(aes(x = `value-of-parameter_a`, y = min.per.day, col = model), linetype = "dotted")+
+  geom_hline(yintercept = 0.91, linetype = "dotted")+
+  geom_line(aes(x = `value-of-parameter_a`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 4.54, linetype = "dashed")
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 1.59)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = sd.per.day, col = model))+
+  geom_hline(yintercept = 0.7)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = min.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 0.91)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_a`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 4.54)
+```
+
+
+
+## Effect of parameter e
+
+make one plot with the med, min, max of the different models over parameter e
+```{r}
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 1.59)+
+  geom_line(aes(x = `value-of-parameter_e`, y = min.per.day, col = model), linetype = "dotted")+
+  geom_hline(yintercept = 0.91, linetype = "dotted")+
+  geom_line(aes(x = `value-of-parameter_e`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 4.54, linetype = "dashed")
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = median.per.day, col = model))+
+  geom_hline(yintercept = 1.59)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = sd.per.day, col = model))+
+  geom_hline(yintercept = 0.7)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = min.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 0.91)
+
+ggplot(data = df)+
+  geom_line(aes(x = `value-of-parameter_e`, y = max.per.day, col = model), linetype = "dashed")+
+  geom_hline(yintercept = 4.54)
+```
+
+
+
+## Effect of both paramters
+
+
+surf is a matrix to generate a flat surface at the value of the reality
+split dived the data by the model (color would do the same for continuous variable)
+in add_surface split = F remove multipüle surfaces for each model and showscale = F remove the color from the legend
+
+```{r}
+surf <- c(
+  c(1.59, 1.59),
+  c(1.59, 1.59)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~median.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on median ", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "median")))
+ 
+fig
+```
+
+
+
+
+
+
+```{r}
+surf <- c(
+  c(0.7, 0.7),
+  c(0.7, 0.7)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~sd.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on SD", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "SD")))
+ 
+fig
+```
+
+
+
+```{r}
+surf <- c(
+  c(0.91, 0.91),
+  c(0.91, 0.91)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~min.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on min", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "min")))
+ 
+fig
+```
+
+
+
+```{r}
+surf <- c(
+  c(4.54, 4.54),
+  c(4.54, 4.54)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~max.per.day, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on max", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "max")))
+ 
+fig
+```
+
+
+
+
+```{r}
+surf <- c(
+  c(0, 0),
+  c(0, 0)
+)
+dim(surf) <- c(2,2)
+y <- c(0,1)
+x <- c(0,1)
+rownames(surf) <- x
+colnames(surf) <- y
+
+fig <- df %>% 
+  plot_ly(x = ~`value-of-parameter_e`, y = ~`value-of-parameter_a`,z = ~mean.diff, split = ~model, type="scatter3d", mode = 'markers') %>%
+  add_surface(z=~surf, x = ~x, y= ~y, opacity = 0.5, split = F, showscale=FALSE)%>%
+  layout(title = " Parameter effect on difference in travel distance", scene = list(xaxis = list(title = "parameter e"), yaxis = list(title = "parameter a"), zaxis = list(title = "difference to reality in travel distance")))
+ 
+fig
+```
+
+
+
+
+
+
+
+
+
+

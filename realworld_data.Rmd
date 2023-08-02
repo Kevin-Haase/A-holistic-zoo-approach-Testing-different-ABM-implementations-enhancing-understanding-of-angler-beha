@@ -1,0 +1,481 @@
+---
+title: "on-site-all"
+author: "Kevin Haase"
+date: "3/16/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install and load packages
+#install.packages("pacman")
+library("pacman")
+
+pacman::p_load(readr, dplyr, tidyr, reshape2,ggplot2, ggrepel, cowplot, ggforce, circlize, chisq.posthoc.test, trend, fitdistrplus)
+
+```
+
+```{r}
+setwd("C:/Users/haase_k/Desktop/SVNKevin/PhD-Anglerverhalten/modelling/Angler Model/NetLogo")
+```
+
+
+
+
+
+#angler data
+
+import dataset that is used to compare model and real world
+
+```{r}
+on_site_all <- read_csv("on_site_all.csv", 
+    col_types = cols(zip_code = col_double()))
+```
+
+
+Compress dataset
+```{r}
+dat <- filter(.data = on_site_all, species == "COD")
+dat <- filter(.data = dat, survey_category == "Boot" | survey_category == "Brandung" | survey_category == "Trolling" | survey_category == "Watangeln" | survey_category == "Kutter" | survey_category == "Strand")
+
+dat <- filter(.data = dat, is.na(harbour_code) == F )
+
+
+dat$survey_category[dat$survey_category == "Brandung"] <- "Land"
+dat$survey_category[dat$survey_category == "Watangeln"] <- "Land"
+dat$survey_category[dat$survey_category == "Strand"] <- "Land"
+dat$survey_category[dat$survey_category == "Kutter"] <- "Kutter"
+dat$survey_category[dat$survey_category == "Boot"] <- "Boot"
+dat$survey_category[dat$survey_category == "Trolling"] <- "Boot"
+
+
+dat <- subset(x = dat, select = c(session_id, SD, year, half_year, month, day, survey_category, harbour_code, ID, zip_code, species, retained, released))
+
+dat <- filter(.data = dat, harbour_code != "SIH")
+dat <- filter(.data = dat, year < 2017 )
+dat <- filter(.data = dat, year > 2011 )
+
+
+dat <- separate(data = dat, col = ID, into = c("session", "ang_count"), sep = "_", remove = F)
+dat$ang_count[dat$ang_count == "NA"] <- NA
+dat$ang_count[is.na(dat$ang_count) == F] <- 1
+dat$ang_count <- as.numeric(dat$ang_count)
+dat_all <- dat
+
+#extrect null Beprobung for later
+dat_nullbep <- filter(.data = dat, is.na(ang_count) == T )
+
+dat <- filter(.data = dat, is.na(zip_code) == F )
+dat <- filter(.data = dat, zip_code > 999)
+dat <- filter(.data = dat, zip_code < 5000 | zip_code > 5999)
+dat <- filter(.data = dat, zip_code < 43000 | zip_code > 43999)
+
+dat_zip <- dat
+```
+
+
+samples per year
+```{r}
+dat <- dat_all
+
+test <- dat %>%
+  group_by(year) %>%
+  summarise(n.samples = length(unique(session_id)))
+
+mean(test$n.samples)
+```
+
+count fishing days per method
+```{r}
+dat <- dat_all
+
+dat %>%
+  group_by(year) %>%
+  summarise(n.angler = sum(ang_count, na.rm = T))
+
+test <- mutate(.data = dat, n.total.fishingdays = sum(ang_count, na.rm = T))
+  
+test <- test %>%
+  group_by(survey_category, n.total.fishingdays)%>%
+  summarise(n.fishingsdays = sum(ang_count, na.rm = T))
+
+test <- mutate(.data = test, perc = n.fishingsdays/n.total.fishingdays)
+
+test
+```
+
+number of locations with nullbeprobungen
+```{r}
+dat <- dat_all
+
+dat %>%
+  group_by(survey_category)%>%
+  summarise(n.locations = length(unique(harbour_code)))
+
+dat <- dat %>%
+  group_by(harbour_code, survey_category) %>%
+  summarise(n.samples = length(unique(session_id)),
+            n.angler = sum(ang_count, na.rm = T))
+```
+
+number of locations with angler interviewed
+```{r}
+dat <- filter(.data = dat_all, ang_count == 1)
+
+test <- dat %>%
+  group_by(survey_category)%>%
+  summarise(real.n.locations = length(unique(harbour_code)))
+
+real_values <- test
+```
+
+
+
+### Catches at accespoints
+
+
+mean catch
+```{r}
+dat <- dat_all
+
+dat <- mutate(.data = dat, catch = retained + released)
+
+mean(dat$catch)
+
+dat %>%
+  group_by(survey_category) %>%
+  summarise(mean = mean(catch))
+```
+
+utility of mean catches
+```{r}
+dat <- dat_all
+
+dat <- mutate(.data = dat, catch = retained + released)
+
+mean(dat$catch) * 1/9
+
+dat %>%
+  group_by(survey_category) %>%
+  summarise(utility = (mean(catch) * 1/9))
+```
+
+
+
+
+
+
+
+
+
+
+distributions at each accespoint
+```{r}
+dat <- dat_all
+
+dat <- mutate(.data = dat, catch = retained + released)
+
+ggplot(data = dat, aes(x = catch))+
+  geom_bar()
+
+ggplot(data = dat, aes(x = catch))+
+  geom_bar()+
+  facet_wrap(~ harbour_code, scales = "free_y")
+```
+
+
+
+negativ binomial with count of catch
+
+```{r}
+dat <- dat_safe
+
+dat <- mutate(.data = dat, catch = retained + released,
+                            n.total.catch = sum(catch),
+                            n.total.angler = length(ID))
+
+
+# fit the negative binomial distribution
+fit <- fitdist(dat$catch, distr = "nbinom")
+summary(fit)
+
+size <- 0.6650456
+mu <- 4.7908966
+
+p <- size/(size + mu)
+var <- mu + mu^2/size
+
+dat <- dat %>%
+  group_by(n.total.catch, n.total.angler, catch) %>%
+  summarise(n.catch = length(catch))
+dat <- mutate(.data = dat, perc.n.catch = n.catch/n.total.angler)
+
+
+dat$nbin <- dnbinom(dat$catch, size=size, mu=mu)
+
+
+ggplot(data = dat, aes(x = catch, y = perc.n.catch))+
+  geom_point()+
+  geom_line(aes(y = nbin))
+```
+
+
+
+
+
+
+calculate mean catches and perc trips over mean per accesspoint
+```{r}
+dat <- dat_all
+dat <- mutate(.data = dat, catch = retained + released)
+
+dat <- dat %>%
+  group_by(survey_category, harbour_code) %>%
+  mutate(n.samples = length(unique(session_id)),
+         n.total.trips = length(ID),
+         total.catch = sum(catch),
+         average_catch = mean(catch),
+         sd_catch = sd(catch))
+
+dat$sd_catch[is.na(dat$sd_catch)] <-0
+dat <- mutate(.data = dat, over.mean = ifelse(catch >= average_catch, 1, 0) )
+
+dat <- dat %>%
+  group_by(n.samples, survey_category, harbour_code, average_catch, sd_catch, n.total.trips, over.mean) %>%
+  summarise(n.over = length(over.mean))
+
+dat <- mutate(.data = dat, perc_trips_over_mean = n.over/n.total.trips)
+
+dat <- filter(.data = dat, over.mean == 1)
+```
+
+
+
+prepare this dataset for ML3
+```{r}
+names(dat)[names(dat) == "survey_category"] <- "fishing_method"
+names(dat)[names(dat) == "harbour_code"] <- "fishing_location"
+
+
+dat <- subset(x = dat, select = c(fishing_location, fishing_method, average_catch, sd_catch, perc_trips_over_mean))
+
+length(unique(dat$fishing_location))
+```
+
+```{r}
+average_catch <- dat
+
+write.table(dat, "average_catch.csv", sep = ",", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+# angler distribution
+
+calculate the angler distribution between the fishing locations
+```{r}
+dat <- dat_all #percentage with nullbeprobung
+
+dat <- filter(.data = dat_all, ang_count == 1)# percenatge with angler interviewed
+
+#percentage with angler stated the zip code
+dat <- dat_zip
+dat <- filter(.data = dat, zip_code > 9999 & zip_code < 33000 | 
+                            zip_code > 37999 & zip_code < 40000 |
+                            zip_code > 48999 & zip_code < 50000)
+```
+
+```{r}
+test <- dat %>%
+  group_by(survey_category)%>%
+  mutate(n.total.samples = length(unique(session_id)),
+         n.total.fishingday = sum(ang_count, na.rm = T))
+
+test <- test %>%
+  group_by(survey_category, n.total.fishingday, harbour_code)%>%
+  summarise(n.location.fishingday = sum(ang_count, na.rm = T))
+
+test <- mutate(.data = test, perc = n.location.fishingday/n.total.fishingday)
+
+test %>%
+  group_by(survey_category)%>%
+  summarise(n.locations = length(unique(harbour_code)))
+
+test <- test%>%
+  group_by(survey_category)%>%
+  summarise(mean.perc = mean(perc)*100,
+            median.perc = median(perc)*100,
+            sd.perc = sd(perc)*100,
+            min.perc = min(perc)*100,
+            max.perc = max(perc)*100)
+
+```
+
+
+calculate the angler distribution between the fishing locations weighted by the number of samplings
+
+```{r}
+dat <- filter(.data = dat_all, ang_count == 1)
+```
+
+
+```{r}
+#count fishing and sample days per fishing method
+test <- dat %>%
+  group_by(survey_category)%>%
+  mutate(n.total.samples = length(unique(session_id)),
+         n.total.fishingday = sum(ang_count, na.rm = T))
+
+test <- test %>%
+  group_by(survey_category, n.total.samples, n.total.fishingday, harbour_code)%>%
+  summarise(n.location.samples = length(unique(session_id)),
+            n.location.fishingday = sum(ang_count, na.rm = T))
+
+
+test %>%
+  group_by(survey_category)%>%
+  summarise(n.locations = length(unique(harbour_code)))
+
+ggplot(data = test, aes(x = n.location.samples, y = n.location.fishingday, col = survey_category))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+test <- mutate(.data = test, perc = n.location.fishingday/n.total.fishingday)
+
+ggplot(data = test, aes(x = n.location.samples, y = perc, col = survey_category))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+test <- mutate(.data = test, ang.per.sample = n.location.fishingday/n.location.samples)
+
+ggplot(data = test, aes(x = n.location.samples, y = ang.per.sample, col = survey_category))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+test <- test %>%
+  group_by(survey_category)%>%
+  mutate(sum.ang.per.sample = sum(ang.per.sample))
+
+test <- mutate(.data = test, perc.per.sample = ang.per.sample/sum.ang.per.sample)
+
+ggplot(data = test, aes(x = n.location.samples, y = perc.per.sample, col = survey_category))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+#with old calculations
+real_world_dist <- test%>%
+  group_by(survey_category)%>%
+  summarise(mean.perc = mean(perc)*100,
+            mean.ang.per.sample = mean(perc.per.sample)*100,
+            median.perc = median(perc)*100,
+            median.ang.per.sample = median(perc.per.sample)*100,
+            sd.perc = sd(perc)*100,
+            sd.ang.per.sample = sd(perc.per.sample)*100,
+            min.perc = min(perc)*100,
+            min.ang.per.sample = min(perc.per.sample)*100,
+            max.perc = max(perc)*100,
+            max.ang.per.sample = max(perc.per.sample)*100)
+
+
+test <- test%>%
+  group_by(survey_category)%>%
+  summarise(real.mean.ang.per.sample = mean(perc.per.sample)*100,
+            real.median.ang.per.sample = median(perc.per.sample)*100,
+            real.sd.ang.per.sample = sd(perc.per.sample)*100,
+            real.min.ang.per.sample = min(perc.per.sample)*100,
+            real.max.ang.per.sample = max(perc.per.sample)*100)
+
+real_values <- left_join(real_values, test)
+names(real_values)[names(real_values) == "survey_category"] <- "fishing_method"
+```
+
+
+
+
+
+
+
+
+#distance data
+
+import data 
+```{r}
+dist <- read_delim("combi_zipcode_accesspoints_distance.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+
+
+dist <- subset(x = dist, select = c("zipcode", "ap_code", "distance_km"))
+
+#only zip codes within 3 hour driving distance
+dist$zipcode <- as.numeric(dist$zipcode)
+dist <- filter(.data = dist, zipcode > 9999 & zipcode < 33000 | 
+                            zipcode > 37999 & zipcode < 40000 |
+                            zipcode > 48999 & zipcode < 50000)
+dist$zipcode <- as.character(dist$zipcode)
+
+names(dist)[names(dist) == "zipcode"] <- "zip_code"
+
+dist_safe <- dist
+```
+
+combine distance with on-site data
+```{r}
+dat <- dat_zip
+dat <- filter(.data = dat, zip_code > 9999 & zip_code < 33000 | 
+                            zip_code > 37999 & zip_code < 40000 |
+                            zip_code > 48999 & zip_code < 50000)
+dist <- dist_safe
+
+
+
+#transform 5 digit zipcode to 2 digit
+dat$zip_code <- formatC(dat$zip_code, width = 5, format = "d", flag = "0")
+dat$zip_code <- as.numeric(substr(dat$zip_code, 1, 2))
+
+dist$zip_code <- formatC(dist$zip_code, width = 5, format = "d", flag = "0")
+dist$zip_code <- as.numeric(substr(dist$zip_code, 1, 2))
+dist <- dist %>%
+  group_by(zip_code, ap_code) %>%
+  summarise(distance = mean(distance_km))
+
+
+#rename colums to match each other 
+names(dat)[names(dat) == "harbour_code"] <- "ap_code"
+```
+
+
+
+combine both datasets with distances
+```{r}
+dat <- left_join(dat, dist)
+names(dat)[names(dat) == "survey_category"] <- "fishing_method"
+```
+
+
+calculate travel distances per zip code
+```{r}
+dat <- filter( .data = dat, distance > 0)
+dat <- dat %>%
+  group_by(fishing_method, zip_code) %>%
+  summarise(mean.dist = mean(distance),
+            med.dist = median(distance),
+            SD.dist = sd(distance),
+            min.dist = min(distance),
+            max.dist = max(distance))
+
+```
+
+
+
+
+
+
