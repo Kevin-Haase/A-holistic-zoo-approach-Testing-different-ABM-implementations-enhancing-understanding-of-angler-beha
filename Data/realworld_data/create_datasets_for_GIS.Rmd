@@ -1,0 +1,238 @@
+---
+title: "create_realworl_datasets"
+author: "Kevin Haase"
+date: "10 3 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install and load packages
+#install.packages("pacman")
+library("pacman")
+
+pacman::p_load(readr, dplyr, tidyr, reshape2,ggplot2, ggrepel, cowplot, ggforce, circlize, chisq.posthoc.test, trend, lhs, nlrx)
+```
+
+```{r}
+setwd("C:/Users/haase_k/Desktop/SVNKevin/PhD-Anglerverhalten/modelling/Angler Model/NetLogo/model_04_prospect_theory")
+```
+
+
+# Accesspoint dataset
+
+Goal to create a dataset with every accespoint, the x and y coordinates, and attributes needed for the Netlogo ABM.
+Attributes needed are the fishing method and the average catch at the location.
+
+
+
+Import datsets
+```{r}
+accesspoints_cordinates <- read_delim("realworld_data/accesspoints_cordinates.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+accesspoints_catch <- read_csv("realworld_data/average_catch.csv")
+```
+
+
+work on the dataset to make them joinable
+- keep only needed x/y coordinate format
+- rename colums to match
+```{r}
+accesspoints_cordinates <- subset(x = accesspoints_cordinates, select = c(ap_code, latitude, longitude))
+
+names(accesspoints_catch)[names(accesspoints_catch) == "fishing_location"] <- "ap_code"
+```
+
+
+join both dataset
+- each row one accesspoint with coordinates, fishing method and average catch
+- if one accespoint have multiple fishing mehtod make duplicate rows
+```{r}
+accesspoints <- left_join(accesspoints_cordinates, accesspoints_catch)
+
+accesspoints <- na.omit(accesspoints)
+```
+
+
+safe dataset
+```{r}
+write.table(accesspoints, "accesspoints.csv", sep = ",", row.names = FALSE)
+```
+
+
+
+# Angler dataset
+
+import dataset
+```{r}
+zip_code_coordinates <- read_delim("realworld_data/zip_code-coordinates.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+angler_per_zipcode <- read_csv("realworld_data/angler_per_zipcode.csv")
+```
+
+
+work on the dataset to make them joinable
+- keep only colums needed
+- rename colums to match
+```{r}
+zip_code_coordinates <- subset(x = zip_code_coordinates, select = c(zip, lat, long))
+
+names(zip_code_coordinates)[names(zip_code_coordinates) == "zip"] <- "zip_code"
+```
+
+
+join both dataset
+- each row one accesspoint with coordinates, fishing method and average catch
+- if one accespoint have multiple fishing mehtod make duplicate rows
+```{r}
+angler <- left_join(zip_code_coordinates, angler_per_zipcode)
+
+angler <- na.omit(angler)
+```
+
+
+make each row one angler
+- mulitply total number of angler agents * perc = angler per zip code
+- duplicate rows for each angler per zip code
+```{r}
+angler$total_angler <- 10000
+
+angler <- mutate(.data = angler, angler_zipcode = round(total_angler * perc_zipcode))
+
+angler <- data.frame(angler[rep(seq_len(dim(angler)[1]), angler$angler_zipcode), , drop = FALSE], row.names=NULL)
+```
+
+
+
+```{r}
+write.table(angler, "angler_complex.csv", sep = ",", row.names = FALSE)
+```
+
+
+
+# Distance dataset
+
+import the dataset
+```{r}
+dis <- read_csv("realworld_data/distance_short.csv")
+```
+
+seperate the first colum in zipcode and ap_code of the location
+remove ' from the strings
+```{r}
+dis <- dis %>%
+  separate(`postcode-location`, c("postcode", "location"), "-")
+
+dis$postcode <- gsub("'",'',dis$postcode)
+dis$location <- gsub("'",'',dis$location)
+```
+
+safe the new dataset
+```{r}
+write.table(dis, "distances.csv", sep = ",", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# prospect theory value function
+
+
+utilities
+```{r}
+catch <- runif(100, min=0, max=9)
+dist <- runif(100, min=0, max=511)
+
+catch_b <- 1/9
+dist_b <- 1/511
+
+catch_utility <- catch * catch_b
+dist_utility <- 1 - dist * dist_b
+
+parameter_a <- 0.5
+utility <- parameter_a * catch_utility + (1 - parameter_a) * dist_utility
+```
+
+
+
+
+value function
+```{r}
+dat <- data.frame(catch = catch,
+                  catch_utility = catch_utility,
+                  dist = dist,
+                  dist_utility = dist_utility, 
+                  utility = utility)
+
+ggplot(data = dat, aes(x = catch, y = catch_utility))+
+  geom_point()
+ggplot(data = dat, aes(x = dist, y = dist_utility))+
+  geom_point()
+
+current_utility = 0.5
+dat <- mutate(.data = dat, utility_change = utility - current_utility)
+
+parameter_PTa <- 0.42
+parameter_PTb <- 0.49
+parameter_PTl <- 1.38
+dat <- mutate(.data = dat, subjectiv_utility = ifelse(utility >= current_utility, utility_change ^ parameter_PTa,  (- parameter_PTl) * (-utility_change) ^ parameter_PTb))
+
+
+ggplot(data = dat, aes(x = utility, y = subjectiv_utility))+
+  geom_point()
+```
+
+
+
+probability of events
+```{r}
+dat$catch_sd <- runif(100, min=0, max=17)
+
+
+dat$prob <- pnorm(6, dat$catch, dat$catch_sd, lower.tail = FALSE) #bei ner normalverteilung liegen recht vom mittelwert immer 50%
+
+
+#simple option
+sd_b <- 1/17
+dat$catch_prob <- 1 - dat$catch_sd * sd_b
+ggplot(data = dat, aes(x = catch_sd, y = catch_prob))+geom_point()
+```
+
+
+weightening function
+```{r}
+#example for prob from 0 to 1
+prob <- runif(100, min=0, max=1)
+
+paramter_up_pos <- 0.44
+paramter_up_neg <- 0.71
+
+decision_weight_gain <- (prob ^ paramter_up_pos) / (prob ^ paramter_up_pos + (1 - prob) ^ paramter_up_pos) ^ (1 / paramter_up_pos)
+decision_weight_loss <- (prob ^ paramter_up_neg) / (prob ^ paramter_up_neg + (1 - prob) ^ paramter_up_neg) ^ (1 / paramter_up_neg)
+
+dat <- data.frame(prob_gain = prob_gain,
+                  decision_weight_gain = decision_weight_gain,
+                  decision_weight_loss = decision_weight_loss)
+
+ggplot(data = dat)+
+  geom_point(aes(x = prob, y = decision_weight_gain), col = "green")+
+  geom_point(aes(x = prob, y = decision_weight_loss), col = "red")+
+  labs(x = "Propability", y = "decision weight")
+```
+
+
+
+
