@@ -1,0 +1,190 @@
+---
+title: "run_model01"
+author: "Kevin Haase"
+date: "4/14/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install and load packages
+#install.packages("pacman")
+library("pacman")
+
+pacman::p_load(readr, dplyr, tidyr, reshape2, ggplot2, lhs, nlrx, future)
+
+```
+
+```{r}
+setwd("~/NetLogo/model_04_bandit")
+```
+
+
+
+
+
+# Create a nl object
+
+```{r}
+
+# Unix default NetLogo installation path (adjust to your needs!):
+netlogopath <- file.path("/home/khaase/Desktop/NetLogo 6.3.0")
+modelpath <- file.path("/home/khaase/NetLogo/model_04_bandit/04_GISworld_bandit.nlogo")
+outpath <- file.path("/home/khaase/NetLogo/model_04_bandit/model_output")
+
+nl <- nl(nlversion = "6.3.0",
+         nlpath = netlogopath,
+         modelpath = modelpath,
+         jvmmem = 1024)
+```
+
+
+
+
+# Create the experiment
+
+```{r}
+nl@experiment <- experiment(expname="model_04_bandit",
+                            outpath= outpath,
+                            idsetup= "setup",
+                            idgo= "go",
+                            
+                            repetition= 10,
+                            runtime= 365,
+                            tickmetrics= "false", #should result be safed every tick
+                            #evalticks= 365,   # ticks results should be safed
+                            
+                            constants = list("value-of-catch_utility_b" = 1/9, 
+                                            "value-of-dist_utility_b" = 1/511),
+                            
+                            variables = list('value-of-parameter_a' = list(min=0, max=1, qfun="qunif"), 
+                                             'value-of-parameter_e' = list(min=0, max=1, qfun="qunif")),
+                            
+                            metrics= c("count angler", 
+                                       'count angler with [fishing_method = "charter"]', 
+                                       'count angler with [fishing_method = "boat"]', 
+                                       'count angler with [fishing_method = "shore"]', 
+                                       "test_a", "test_e", "catch_utility_b", "dist_utility_b",
+                                       
+                                       "total_trips", "total_trips / number_angler", 
+                                       "total_catch", "precision (total_catch / total_trips) 3"),
+                            
+                            
+                            metrics.turtles = list("locations" = c("location_name", "location_method", "CPUE_mean", "CPUE_sd", "visited", "total_visits", 
+                                                                   "total_location_catch"),
+                                                   "angler" = c("who", "homelocation_name", "fishing_method", "total_angler_trips", 
+                                                                "total_traveled_dist", "total_angler_catch")) 
+                            )
+
+```
+
+
+```{r}
+nl@simdesign <- simdesign_lhs(nl = nl, samples = 21, nseeds = 1, precision = 2)
+
+#nl@simdesign <- simdesign_lhs(nl=nl,samples=100,nseeds=3,precision=3)
+
+
+```
+
+
+
+
+# Run the experiment
+
+```{r}
+#run one variable combination as test
+#results <- run_nl_one(nl = nl)
+
+#run full design
+start_time <- Sys.time()
+
+plan(multisession)
+results_bandit <- run_nl_all(nl = nl, split = 7)
+
+end_time <- Sys.time()
+end_time - start_time
+
+
+#safe the rsults as csv
+#setsim(nl, "simoutput") <- results_bandit
+#write_simoutput(nl)
+```
+
+
+
+
+
+
+
+
+# Extract data for analysis
+
+```{r}
+results_bandit <- unite(results_bandit, run_ID, c(siminputrow, '[run number]'), remove=FALSE)
+
+run_confi <- subset(x = results_bandit, select = c(run_ID, `value-of-parameter_a`, `value-of-parameter_e`))
+```
+
+
+```{r}
+#Loop um viele Datensätze einzuladen
+#erzeuge eine Liste (save_files) mit 210 Plätzen wo die files reingespeichert werden
+save_files <- list()
+save_files <- vector(mode = "list", length = 210)
+
+#Schleife um die Datensätze einzulesen
+for (i in 1:210) {
+  save_files[[i]] <- results_bandit[[20]][[i]]
+}
+
+
+run <- rep(seq(1,21,1), each = 10)
+rep <- seq(1,10,1)
+run_ID <- paste(run, rep, sep = "_")
+save_files <- mapply(cbind, save_files, "run_ID"=run_ID, SIMPLIFY=F)
+#wendet eine Funktion "rbind" auf eine liste an
+location <- do.call(rbind, save_files)
+location <- left_join(location, run_confi)
+
+write.table(location, "model_output/location.csv", sep = ",", row.names = FALSE)
+```
+
+
+```{r}
+#Loop um viele Datensätze einzuladen
+#erzeuge eine Liste (save_files) mit 210 Plätzen wo die files reingespeichert werden
+save_files <- list()
+save_files <- vector(mode = "list", length = 210)
+
+#Schleife um die Datensätze einzulesen
+for (i in 1:210) {
+  save_files[[i]] <- results_bandit[[21]][[i]]
+}
+
+
+run <- rep(seq(1,21,1), each = 10)
+rep <- seq(1,10,1)
+run_ID <- paste(run, rep, sep = "_")
+save_files <- mapply(cbind, save_files, "run_ID"=run_ID, SIMPLIFY=F)
+#wendet eine Funktion "rbind" auf eine liste an
+angler <- do.call(rbind, save_files)
+angler <- left_join(angler, run_confi)
+
+write.table(angler, "model_output/angler.csv", sep = ",", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
